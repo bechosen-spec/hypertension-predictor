@@ -13,3 +13,4 @@ google-genai>=0.3.0
 # Auth & Storage
 streamlit-authenticator>=0.3.3
 SQLAlchemy>=2.0.0
+bcrypt>=4.0.1

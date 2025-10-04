@@ -1,16 +1,23 @@
 # db.py
 """
-SQLite logging for predictions and LLM feedback.
+SQLite storage for:
+- Prediction logs (model outputs, inputs, LLM feedback)
+- Basic user accounts (for Sign Up / Sign In)
 
-Creates a lightweight local DB (default: ./app.db) with a single table:
-- prediction_logs: stores user, timestamp, model output, raw patient input,
-  top local features, and generated guidance.
+Default DB path: ./app.db  (override with env var DB_URL)
 
-Usage:
-    from db import init_db, log_prediction, fetch_logs
-    init_db()
-    log_prediction(username, prediction, probability, patient, top_features, llm_feedback)
-    rows = fetch_logs(limit=200, username="admin")
+Public API
+----------
+init_db()
+log_prediction(username, prediction, probability, patient, top_features, llm_feedback, model_version=None, notes=None)
+fetch_logs(limit=200, username=None) -> List[PredictionLog]
+to_dict(row) -> dict
+
+# User management
+create_user(username, name, password) -> bool
+get_user(username) -> Optional[User]
+verify_password(plain, hashed) -> bool
+hash_password(plain) -> str
 """
 
 from __future__ import annotations
@@ -20,6 +27,7 @@ import os
 import datetime as dt
 from typing import Any, Dict, List, Optional
 
+import bcrypt
 from sqlalchemy import (
     Column,
     DateTime,
@@ -28,6 +36,7 @@ from sqlalchemy import (
     String,
     Text,
     create_engine,
+    Index,
 )
 from sqlalchemy.orm import declarative_base, sessionmaker
 
@@ -44,8 +53,22 @@ Base = declarative_base()
 
 
 # --------------------------------------------------------------------
-# ORM Model
+# ORM Models
 # --------------------------------------------------------------------
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String(120), unique=True, nullable=False, index=True)
+    name = Column(String(200), nullable=False)
+    password_hash = Column(String(200), nullable=False)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, index=True)
+
+    __table_args__ = (
+        Index("ix_users_username_unique", "username", unique=True),
+    )
+
+
 class PredictionLog(Base):
     __tablename__ = "prediction_logs"
 
@@ -67,13 +90,59 @@ class PredictionLog(Base):
 
 
 # --------------------------------------------------------------------
-# Public API
+# DB init
 # --------------------------------------------------------------------
 def init_db() -> None:
     """Create tables if they don't exist."""
     Base.metadata.create_all(bind=engine)
 
 
+# --------------------------------------------------------------------
+# User helpers
+# --------------------------------------------------------------------
+def hash_password(plain: str) -> str:
+    """Return bcrypt hash for a plaintext password."""
+    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt()).decode()
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    """Validate plaintext password against a bcrypt hash."""
+    try:
+        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    except Exception:
+        return False
+
+
+def create_user(username: str, name: str, password: str) -> bool:
+    """
+    Create a new user. Returns True if created, False if username exists.
+    """
+    username = (username or "").strip()
+    name = (name or "").strip()
+    if not username or not name or not password:
+        return False
+
+    with SessionLocal() as s:
+        existing = s.query(User).filter(User.username == username).first()
+        if existing:
+            return False
+        u = User(username=username, name=name, password_hash=hash_password(password))
+        s.add(u)
+        s.commit()
+        return True
+
+
+def get_user(username: str) -> Optional[User]:
+    """Fetch a user by username."""
+    if not username:
+        return None
+    with SessionLocal() as s:
+        return s.query(User).filter(User.username == username).first()
+
+
+# --------------------------------------------------------------------
+# Prediction logging API
+# --------------------------------------------------------------------
 def log_prediction(
     username: Optional[str],
     prediction: str,
@@ -113,7 +182,7 @@ def fetch_logs(limit: int = 200, username: Optional[str] = None) -> List[Predict
 
 
 # --------------------------------------------------------------------
-# Optional helpers
+# Utility helpers
 # --------------------------------------------------------------------
 def to_dict(row: PredictionLog) -> Dict[str, Any]:
     """Convert an ORM row to a plain dict (with parsed JSON fields)."""
