@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.build/
+dist/
+.venv/
+venv/
+.env
+.env.*
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Tests / Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Streamlit
+.streamlit/secrets.toml
+.streamlit/config.toml
+
+# Credentials & sensitive
+*.json
+*.pem
+*.p12
+*.key
+
+# Local DB & logs
+app.db
+*.sqlite
+*.sqlite3
+logs/
+*.log
+
+# Model artifacts (don’t commit trained binaries)
+models/*.joblib
+models/*.pkl
+models/*.bin
+
+# OS / Editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,23 @@
+# .streamlit/config.toml
+
+[theme]
+# Light, clean theme — tweak to your brand colors if you like.
+primaryColor = "#2B6CB0"            # buttons, sliders
+backgroundColor = "#FFFFFF"         # main background
+secondaryBackgroundColor = "#F6F8FA"# sidebar / cards
+textColor = "#0F172A"               # near-slate-900
+font = "sans serif"                 # "serif" or "monospace" also allowed
+
+[server]
+headless = true
+enableCORS = false                  # set true if you need strict CORS
+enableXsrfProtection = true
+maxUploadSize = 200                 # MB
+runOnSave = false
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "auto"                # "minimal", "viewer", "auto"
+showErrorDetails = true             # set false to hide stack traces from users
