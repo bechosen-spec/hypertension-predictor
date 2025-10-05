@@ -36,9 +36,9 @@ logs/
 *.log
 
 # Model artifacts (don’t commit trained binaries)
-models/*.joblib
-models/*.pkl
-models/*.bin
+# models/*.joblib
+# models/*.pkl
+# models/*.bin
 
 # OS / Editors
 .DS_Store
