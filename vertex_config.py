@@ -103,135 +103,134 @@
 #     }
 
 
-from **future** import annotations
+from __future__ import annotations
 
-import os
 import json
+import os
 import tempfile
 from typing import Optional
 
 from google import genai
 
 try:
-import streamlit as st
-except Exception:
-st = None
+    import streamlit as st
+except ImportError:
+    st = None
 
-def _write_sa_to_tempfile(sa_json) -> str:
-"""
-Safely write a service account JSON object/string to a temp file.
-Validates JSON before writing.
-"""
 
-```
-try:
-    if isinstance(sa_json, str):
-        sa_json = json.loads(sa_json)
+def _write_sa_to_tempfile(service_account_data) -> str:
+    """
+    Write service account credentials to a temporary file and return the path.
+    Supports both dict and JSON string inputs.
+    """
 
-    if not isinstance(sa_json, dict):
-        raise ValueError("Service account credentials must be a JSON object.")
+    try:
+        if isinstance(service_account_data, str):
+            service_account_data = json.loads(service_account_data)
 
-except Exception as e:
-    raise RuntimeError(
-        f"Invalid service account JSON provided: {e}"
-    ) from e
+        if not isinstance(service_account_data, dict):
+            raise ValueError("Service account credentials must be a JSON object.")
 
-fd, path = tempfile.mkstemp(prefix="sa_", suffix=".json")
+    except Exception as e:
+        raise RuntimeError(
+            f"Invalid service account JSON: {e}"
+        ) from e
 
-with os.fdopen(fd, "w", encoding="utf-8") as f:
-    json.dump(sa_json, f)
+    fd, path = tempfile.mkstemp(prefix="sa_", suffix=".json")
 
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = path
-return path
-```
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(service_account_data, f)
+
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = path
+
+    return path
+
 
 def _load_conf_from_streamlit() -> Optional[dict]:
-"""Load config from Streamlit secrets."""
-if st is None:
-return None
+    """Load GCP config from Streamlit secrets."""
 
-```
-try:
-    if "gcp" not in st.secrets:
+    if st is None:
         return None
 
-    gcp = dict(st.secrets["gcp"])
+    try:
+        if "gcp" not in st.secrets:
+            return None
 
-    if "project_id" not in gcp:
-        raise RuntimeError("Missing gcp.project_id in Streamlit secrets")
+        gcp = dict(st.secrets["gcp"])
 
-    gcp.setdefault("location", "us-central1")
+        if "project_id" not in gcp:
+            raise RuntimeError("Missing gcp.project_id in Streamlit secrets")
 
-    return gcp
+        gcp.setdefault("location", "us-central1")
 
-except Exception as e:
-    raise RuntimeError(f"Failed to load Streamlit secrets: {e}")
-```
+        return gcp
+
+    except Exception as e:
+        raise RuntimeError(f"Failed to load Streamlit secrets: {e}")
+
 
 def _load_conf_from_env() -> dict:
-"""Load config from environment variables."""
+    """Load GCP config from environment variables."""
 
-```
-project_id = os.getenv("PROJECT_ID")
+    project_id = os.getenv("PROJECT_ID")
+    location = os.getenv("LOCATION", "us-central1")
 
-if not project_id:
-    raise RuntimeError(
-        "PROJECT_ID is missing. Configure PROJECT_ID or Streamlit secrets."
-    )
+    if not project_id:
+        raise RuntimeError(
+            "PROJECT_ID is missing. Set PROJECT_ID or configure Streamlit secrets."
+        )
 
-conf = {
-    "project_id": project_id,
-    "location": os.getenv("LOCATION", "us-central1"),
-}
+    conf = {
+        "project_id": project_id,
+        "location": location,
+    }
 
-gac_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    gac_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
-if gac_path and os.path.isfile(gac_path):
-    conf["gac_path"] = gac_path
+    if gac_path and os.path.isfile(gac_path):
+        conf["gac_path"] = gac_path
+        return conf
+
+    service_account_json = os.getenv("SERVICE_ACCOUNT_JSON")
+
+    if service_account_json:
+        conf["service_account_json"] = service_account_json
+
     return conf
 
-sa_json = os.getenv("SERVICE_ACCOUNT_JSON")
-
-if sa_json:
-    conf["service_account_json"] = sa_json
-
-return conf
-```
 
 def get_vertex_client() -> genai.Client:
-"""
-Create Vertex AI Gemini client.
+    """
+    Create and return a Vertex AI Gemini client.
 
-```
-Supports:
-- Streamlit secrets
-- GOOGLE_APPLICATION_CREDENTIALS
-- SERVICE_ACCOUNT_JSON
-"""
+    Supported auth methods:
+    1. Streamlit secrets
+    2. GOOGLE_APPLICATION_CREDENTIALS
+    3. SERVICE_ACCOUNT_JSON environment variable
+    """
 
-conf = _load_conf_from_streamlit() or _load_conf_from_env()
+    conf = _load_conf_from_streamlit() or _load_conf_from_env()
 
-project_id = conf["project_id"]
-location = conf.get("location", "us-central1")
+    project_id = conf["project_id"]
+    location = conf.get("location", "us-central1")
 
-if "service_account_json" in conf:
-    _write_sa_to_tempfile(conf["service_account_json"])
+    if "service_account_json" in conf:
+        _write_sa_to_tempfile(conf["service_account_json"])
 
-return genai.Client(
-    vertexai=True,
-    project=project_id,
-    location=location,
-)
-```
+    return genai.Client(
+        vertexai=True,
+        project=project_id,
+        location=location,
+    )
+
 
 def get_default_gen_config(
-temperature: float = 0.3,
-top_p: float = 0.95,
-max_output_tokens: int = 1024,
+    temperature: float = 0.3,
+    top_p: float = 0.95,
+    max_output_tokens: int = 1024,
 ) -> dict:
-return {
-"temperature": temperature,
-"top_p": top_p,
-"max_output_tokens": max_output_tokens,
-}
-
+    return {
+        "temperature": float(temperature),
+        "top_p": float(top_p),
+        "max_output_tokens": int(max_output_tokens),
+    }
