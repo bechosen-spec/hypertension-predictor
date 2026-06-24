@@ -118,14 +118,29 @@ except ImportError:
     st = None
 
 
+def _convert_to_dict(obj):
+    """Convert Streamlit AttrDict/TOML objects recursively to plain dicts."""
+
+    if isinstance(obj, dict):
+        return {k: _convert_to_dict(v) for k, v in obj.items()}
+
+    if hasattr(obj, "items"):
+        try:
+            return {k: _convert_to_dict(v) for k, v in obj.items()}
+        except Exception:
+            pass
+
+    return obj
+
+
 def _write_sa_to_tempfile(service_account_data) -> str:
-    """
-    Write service account credentials to a temporary file and return its path.
-    """
+    """Write service account credentials to a temporary JSON file."""
+
+    service_account_data = _convert_to_dict(service_account_data)
 
     if not isinstance(service_account_data, dict):
         raise RuntimeError(
-            "Expected gcp.service_account to be a TOML object/dictionary."
+            f"Expected service account credentials as dict, got {type(service_account_data)}"
         )
 
     fd, path = tempfile.mkstemp(prefix="sa_", suffix=".json")
@@ -148,10 +163,10 @@ def _load_conf_from_streamlit() -> Optional[dict]:
         if "gcp" not in st.secrets:
             return None
 
-        gcp = dict(st.secrets["gcp"])
+        gcp = _convert_to_dict(st.secrets["gcp"])
 
         if "project_id" not in gcp:
-            raise RuntimeError("Missing gcp.project_id in Streamlit secrets.")
+            raise RuntimeError("Missing gcp.project_id in Streamlit secrets")
 
         gcp.setdefault("location", "us-central1")
 
@@ -162,7 +177,7 @@ def _load_conf_from_streamlit() -> Optional[dict]:
 
 
 def _load_conf_from_env() -> dict:
-    """Fallback configuration from environment variables."""
+    """Fallback to environment variables."""
 
     project_id = os.getenv("PROJECT_ID")
     location = os.getenv("LOCATION", "us-central1")
@@ -180,7 +195,7 @@ def _load_conf_from_env() -> dict:
 
 def get_vertex_client() -> genai.Client:
     """
-    Create a Vertex AI Gemini client.
+    Create Vertex AI Gemini client.
     """
 
     conf = _load_conf_from_streamlit() or _load_conf_from_env()
@@ -188,7 +203,7 @@ def get_vertex_client() -> genai.Client:
     project_id = conf["project_id"]
     location = conf.get("location", "us-central1")
 
-    # New structure:
+    # Supports:
     # [gcp.service_account]
     if "service_account" in conf:
         _write_sa_to_tempfile(conf["service_account"])
