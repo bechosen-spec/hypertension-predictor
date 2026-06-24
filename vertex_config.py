@@ -120,21 +120,13 @@ except ImportError:
 
 def _write_sa_to_tempfile(service_account_data) -> str:
     """
-    Write service account credentials to a temporary file and return the path.
-    Supports both dict and JSON string inputs.
+    Write service account credentials to a temporary file and return its path.
     """
 
-    try:
-        if isinstance(service_account_data, str):
-            service_account_data = json.loads(service_account_data)
-
-        if not isinstance(service_account_data, dict):
-            raise ValueError("Service account credentials must be a JSON object.")
-
-    except Exception as e:
+    if not isinstance(service_account_data, dict):
         raise RuntimeError(
-            f"Invalid service account JSON: {e}"
-        ) from e
+            "Expected gcp.service_account to be a TOML object/dictionary."
+        )
 
     fd, path = tempfile.mkstemp(prefix="sa_", suffix=".json")
 
@@ -147,7 +139,7 @@ def _write_sa_to_tempfile(service_account_data) -> str:
 
 
 def _load_conf_from_streamlit() -> Optional[dict]:
-    """Load GCP config from Streamlit secrets."""
+    """Load GCP configuration from Streamlit secrets."""
 
     if st is None:
         return None
@@ -159,54 +151,36 @@ def _load_conf_from_streamlit() -> Optional[dict]:
         gcp = dict(st.secrets["gcp"])
 
         if "project_id" not in gcp:
-            raise RuntimeError("Missing gcp.project_id in Streamlit secrets")
+            raise RuntimeError("Missing gcp.project_id in Streamlit secrets.")
 
         gcp.setdefault("location", "us-central1")
 
         return gcp
 
     except Exception as e:
-        raise RuntimeError(f"Failed to load Streamlit secrets: {e}")
+        raise RuntimeError(f"Failed to load Streamlit secrets: {e}") from e
 
 
 def _load_conf_from_env() -> dict:
-    """Load GCP config from environment variables."""
+    """Fallback configuration from environment variables."""
 
     project_id = os.getenv("PROJECT_ID")
     location = os.getenv("LOCATION", "us-central1")
 
     if not project_id:
         raise RuntimeError(
-            "PROJECT_ID is missing. Set PROJECT_ID or configure Streamlit secrets."
+            "PROJECT_ID not found. Configure Streamlit secrets or environment variables."
         )
 
-    conf = {
+    return {
         "project_id": project_id,
         "location": location,
     }
 
-    gac_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-
-    if gac_path and os.path.isfile(gac_path):
-        conf["gac_path"] = gac_path
-        return conf
-
-    service_account_json = os.getenv("SERVICE_ACCOUNT_JSON")
-
-    if service_account_json:
-        conf["service_account_json"] = service_account_json
-
-    return conf
-
 
 def get_vertex_client() -> genai.Client:
     """
-    Create and return a Vertex AI Gemini client.
-
-    Supported auth methods:
-    1. Streamlit secrets
-    2. GOOGLE_APPLICATION_CREDENTIALS
-    3. SERVICE_ACCOUNT_JSON environment variable
+    Create a Vertex AI Gemini client.
     """
 
     conf = _load_conf_from_streamlit() or _load_conf_from_env()
@@ -214,8 +188,10 @@ def get_vertex_client() -> genai.Client:
     project_id = conf["project_id"]
     location = conf.get("location", "us-central1")
 
-    if "service_account_json" in conf:
-        _write_sa_to_tempfile(conf["service_account_json"])
+    # New structure:
+    # [gcp.service_account]
+    if "service_account" in conf:
+        _write_sa_to_tempfile(conf["service_account"])
 
     return genai.Client(
         vertexai=True,
