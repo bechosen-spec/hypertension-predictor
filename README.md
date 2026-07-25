@@ -89,31 +89,71 @@ export DB_URL="postgresql+psycopg2://user:password@host:5432/database"
 
 ### Vertex AI
 
-Environment configuration:
+The application supports either Streamlit secrets or environment configuration.
+Use exactly one `[gcp]` table—duplicating it makes the TOML invalid. A safe
+template is available at `.streamlit/secrets.example.toml`.
+
+Environment configuration with a service-account file:
 
 ```bash
-export PROJECT_ID="your-gcp-project"
-export LOCATION="us-central1"
+export GOOGLE_CLOUD_PROJECT="your-gcp-project"
+export GOOGLE_CLOUD_LOCATION="global"
 export GOOGLE_APPLICATION_CREDENTIALS="/absolute/path/to/service-account.json"
+export GEMINI_MODEL="gemini-2.5-pro"
 ```
 
-Alternatively, configure Streamlit secrets:
+The older `PROJECT_ID` and `LOCATION` names remain supported. Inline
+`SERVICE_ACCOUNT_JSON` is also supported. If none is supplied, the app tries
+Application Default Credentials.
+
+Streamlit secrets using a TOML service-account table:
 
 ```toml
 [gcp]
 project_id = "your-gcp-project"
-location = "us-central1"
-service_account_json = """{ ... }"""
+location = "global"
+model_name = "gemini-2.5-pro"
+
+[gcp.service_account]
+type = "service_account"
+project_id = "your-gcp-project"
+private_key = "..."
+client_email = "..."
+token_uri = "https://oauth2.googleapis.com/token"
 ```
 
-Never commit `.streamlit/secrets.toml`, database files, or credentials. If Gemini cannot be reached, the model result is still saved and five clearly labeled generic wellness suggestions are displayed.
+`gcp.service_account_json` as a JSON string is supported as an alternative.
+Never commit `.streamlit/secrets.toml`, database files, or credentials.
+
+Before running the app, test the same client, project, region, credentials, and
+model independently:
+
+```bash
+python scripts/diagnose_gemini.py
+python scripts/diagnose_gemini.py --verbose
+```
+
+The diagnostic prints only configuration metadata—not private keys—and returns
+a nonzero exit code with the exact exception when authentication, DNS, IAM,
+API enablement, region, or model access fails.
+
+Google Cloud must have:
+
+- Billing enabled for the selected project
+- Vertex AI API (`aiplatform.googleapis.com`) enabled
+- The service account granted `roles/aiplatform.user` or equivalent permissions
+- Outbound HTTPS/DNS access to `oauth2.googleapis.com` and `aiplatform.googleapis.com`
+
+If Gemini cannot be reached, the Random Forest result is still saved and five
+clearly labelled generic wellness suggestions are displayed.
 
 ## Testing
 
 ```bash
 python -m pytest -q
 python scripts/verify_artifacts.py
-python -m compileall -q app.py db.py inference.py vertex_config.py styles.py ui_components.py utils pages tests
+python scripts/diagnose_gemini.py
+python -m compileall -q app.py db.py guidance.py inference.py vertex_config.py styles.py ui_components.py utils scripts tests
 ```
 
 Tests cover artifact loading, feature alignment, output/probability behavior, importance ordering, shared authentication state, database-level record ownership, missing-image fallback detection, and risk presentation helpers.

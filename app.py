@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import uuid
 from datetime import datetime
@@ -44,24 +43,15 @@ from utils.auth import (
 from utils.app_logic import (
     build_html_report,
     history_json,
-    parse_recommendations,
     validate_patient,
 )
-from vertex_config import get_default_gen_config, get_vertex_client
+from guidance import generate_guidance
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
 
 APP_NAME = "PulseWise Risk"
 APP_VERSION = "2.0"
-LLM_MODEL_NAME = "gemini-2.5-pro"
-GENERIC_GUIDANCE = [
-    "Check your blood pressure with a validated monitor and keep a simple record to discuss with a healthcare professional.",
-    "Choose lower-sodium foods when practical, and check packaged-food labels for sodium content.",
-    "Aim for regular, comfortable physical activity that suits your health and ability.",
-    "Support consistent sleep and use a simple stress-management habit, such as slow breathing or a short walk.",
-    "Arrange a professional review if readings are repeatedly high, and never start, stop, or change medication without clinical advice.",
-]
 DISPLAY_FEATURES = {
     "Age": "Age",
     "BMI": "Body mass index",
@@ -102,53 +92,6 @@ except Exception:
 @st.cache_resource(show_spinner=False)
 def cached_artifacts():
     return load_artifacts()
-
-
-def extract_text(response) -> str:
-    text = getattr(response, "text", None)
-    if text:
-        return text.strip()
-    parts: list[str] = []
-    for candidate in getattr(response, "candidates", []) or []:
-        for part in getattr(getattr(candidate, "content", None), "parts", []) or []:
-            if getattr(part, "text", None):
-                parts.append(part.text)
-    return "\n".join(parts).strip()
-
-
-def generate_guidance(patient: dict, label: str, probability: float | None, factors: dict) -> tuple[str, list[str], bool]:
-    prompt = f"""
-The Random Forest model—not you—produced this educational hypertension-risk estimate.
-Patient inputs: {json.dumps(patient)}
-Stored model classification: {label}
-Estimated probability of hypertension class: {probability}
-Relevant active inputs ranked using global importance: {json.dumps(factors)}
-
-Write exactly these sections:
-Prediction Summary:
-Key Factors Influencing Prediction:
-Personalized Recommendations:
-
-Under Personalized Recommendations, give EXACTLY five short numbered recommendations.
-Use cautious plain language. Do not diagnose, prescribe, or suggest medication changes.
-Encourage appropriate blood-pressure measurement and professional review.
-End the fifth recommendation with a reminder that this is not medical advice.
-"""
-    try:
-        client = get_vertex_client()
-        response = client.models.generate_content(
-            model=LLM_MODEL_NAME,
-            contents=prompt,
-            config=get_default_gen_config(0.3, 0.95, 2048),
-        )
-        raw = extract_text(response)
-        items = parse_recommendations(raw)
-        if len(items) == 5:
-            return raw, items, True
-        LOGGER.warning("Gemini response did not contain exactly five parseable recommendations")
-    except Exception:
-        LOGGER.exception("Gemini guidance generation failed")
-    return "\n".join(f"{i}. {item}" for i, item in enumerate(GENERIC_GUIDANCE, 1)), GENERIC_GUIDANCE, False
 
 
 def human_feature(name: str) -> str:
