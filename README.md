@@ -1,262 +1,148 @@
-# 🩺 Hypertension Risk Predictor
+# PulseWise Risk
 
-**Live demo:** [https://hypertension-predictor.streamlit.app](https://hypertension-predictor.streamlit.app)
+PulseWise Risk is a polished Streamlit demonstration that estimates hypertension-related risk from ten health and lifestyle inputs. A saved Random Forest classifier produces the classification and probability. Google Gemini only explains that model output and generates cautious wellness guidance—it does **not** make the prediction.
 
-A Streamlit app that predicts a patient’s hypertension risk from simple inputs, highlights the key factors influencing the prediction, and generates **personalized health guidance** using Google **Gemini** (Vertex AI). It also includes **Sign Up / Sign In** and a **Dashboard** for viewing and exporting past predictions and LLM feedback.
+> This project is educational. It is not a medical device, diagnosis, emergency service, or replacement for a qualified healthcare professional.
 
----
+## User experience
 
-## ✨ Features
+1. Landing page with product explanation, privacy messaging, sign-in, and account creation
+2. Private authenticated overview and recent activity
+3. Four-stage assessment: basic information, lifestyle, medical background, and review
+4. Calm result summary with estimated probability and cautious interpretation
+5. Relevant submitted factors and global model-importance visualization
+6. Exactly five Gemini recommendations, with a generic fallback when Gemini is unavailable
+7. User-owned history, filtering, trend visualization, CSV/JSON exports, and an HTML assessment report
+8. General health education and account/privacy information
 
-* **Prediction UI**
-  Collects Age, BMI, Salt Intake, Stress, Sleep, BP history, Medication, Family history, Exercise, and Smoking status → predicts risk.
-* **Explainability**
-  Shows **global feature importances** (from your model) and a **local snapshot** of top factors for the current case.
-* **Personalized Guidance (LLM)**
-  Uses Gemini (Vertex AI) to produce clear, non-judgmental, actionable tips tailored to the patient’s inputs and model outcome.
-* **Authentication & Dashboard**
-  Users can **Sign Up / Sign In**. After sign-in, a **Dashboard** lists past predictions, lets you inspect details, and **export CSV/JSON**.
-* **Local logging (SQLite)**
-  Stores user, timestamp, patient input, model output, key factors, and LLM guidance.
+## Project layout
 
----
-
-## 🧱 Architecture
-
-* **Frontend:** Streamlit (`app.py`)
-* **Inference & Preprocessing:** `inference.py`
-  Loads `best_rf_model.joblib`, `scaler.joblib`, and `feature_names.joblib`; aligns/encodes inputs exactly like training.
-* **LLM Client:** `vertex_config.py` using `google-genai` (Vertex AI)
-* **Database:** SQLite via SQLAlchemy (`db.py`)
-
-  * `users` (simple auth)
-  * `prediction_logs` (audit trail)
-* **Dashboard:** Built into the main app (gated behind auth)
-* **Scripts / Tests:**
-
-  * `scripts/verify_artifacts.py` quick artifact sanity check
-  * `scripts/export_feature_names.py` generate `feature_names.joblib`
-  * `tests/` basic unit tests & CI (GitHub Actions)
-
----
-
-## 📁 Repository structure
-
-```
-.
-├── app.py
-├── inference.py
-├── vertex_config.py
-├── db.py
-├── models/
-│   ├── best_rf_model.joblib
-│   ├── scaler.joblib
-│   └── feature_names.joblib
-├── scripts/
-│   ├── verify_artifacts.py
-│   └── export_feature_names.py
-├── tests/
-│   ├── conftest.py
-│   └── test_inference.py
-├── .streamlit/
-│   ├── config.toml
-│   └── secrets.toml            # DO NOT COMMIT (ignored)
-├── .github/workflows/
-│   ├── ci.yml
-│   └── codeql.yml
-├── requirements.txt
-├── .gitignore
-└── README.md
+```text
+app.py                         Main application and page flow
+inference.py                   Artifact loading, preprocessing, prediction
+db.py                          SQLAlchemy users and prediction records
+vertex_config.py               Vertex AI / Gemini client configuration
+styles.py                      Central visual theme and responsive CSS
+ui_components.py               Reusable cards, notices, progress, images
+utils/auth.py                  Shared Streamlit authentication state
+assets/heart_health_hero.png   Locally generated, optimized hero artwork
+models/                        Existing model, scaler, and feature schema
+tests/                         Inference, privacy, auth, and UI helper tests
+scripts/                       Artifact export and verification helpers
 ```
 
----
+## Prediction and explanation
 
-## 🚀 Getting started (local)
+The inference pipeline remains compatible with the saved training workflow:
 
-### 1) Clone & create a virtual environment
+- Numerical inputs: `Age`, `Salt_Intake`, `Stress_Score`, `Sleep_Duration`, and `BMI`
+- Categorical inputs are one-hot encoded using the existing values
+- The saved scaler transforms numerical columns
+- Every row is aligned to the exact saved feature-name order
+- The Random Forest returns the class and class-1 probability
+
+“Global model importance” describes patterns used by the model across its training data. It is not an explanation of one person’s result. “Relevant submitted factors” shows active inputs ranked using that global importance. It does not claim SHAP values or causal patient-level contributions.
+
+## Screenshots
+
+Add deployment screenshots here after a manual browser review:
+
+- `docs/screenshots/landing.png`
+- `docs/screenshots/assessment.png`
+- `docs/screenshots/results.png`
+- `docs/screenshots/history.png`
+
+The hero artwork is stored locally so the landing page does not depend on a remote image URL. Missing artwork falls back to an accessible in-app placeholder.
+
+## Local setup
 
 ```bash
-git clone <your-repo-url> hypertension-predictor
-cd hypertension-predictor
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-### 2) Place model artifacts
-
-Put these **three files** in `models/`:
-
-* `best_rf_model.joblib`
-* `scaler.joblib`
-* `feature_names.joblib`  ← must match the **exact** columns of your training design matrix.
-
-> Don’t have `feature_names.joblib` yet?
->
-> * If you have your **final X_train CSV** (already one-hot encoded):
->
->   ```bash
->   python scripts/export_feature_names.py --design-csv path/to/X_train_final.csv
->   ```
-> * If you only have a **raw training CSV**:
->
->   ```bash
->   python scripts/export_feature_names.py --raw-csv path/to/train.csv --target-column TARGET_NAME
->   ```
-
-### 3) Configure Vertex AI (Gemini)
-
-**Option A (recommended for local):** point to a real key file
-
-```bash
-export GOOGLE_APPLICATION_CREDENTIALS="$HOME/keys/vertex-sa.json"
-export PROJECT_ID="your-gcp-project-id"
-export LOCATION="us-central1"
-```
-
-**Option B (Streamlit secrets):** paste into `.streamlit/secrets.toml` (not committed)
-
-```toml
-[gcp]
-project_id = "your-gcp-project-id"
-location   = "us-central1"
-service_account_json = """
-{ ...full service account JSON with \\n in the private_key... }
-"""
-```
-
-> ⚠️ Ensure the `private_key` in the JSON contains **escaped** newlines (`\\n`) — not literal line breaks.
-
-### 4) Initialize DB & run a quick artifact check (optional)
-
-```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 python scripts/verify_artifacts.py
-```
-
-### 5) Run the app
-
-```bash
 streamlit run app.py
 ```
 
-Open the local URL shown, **Sign Up** to create a user, **Sign In**, then try a prediction and visit the **Dashboard** tab.
+The existing artifacts must remain in `models/`:
 
----
+- `best_rf_model.joblib`
+- `scaler.joblib`
+- `feature_names.joblib`
 
-## 🔐 Authentication notes
+## Configuration
 
-* The app includes a minimal user system in `db.py` using **bcrypt**.
-* First-time: click **Sign Up** in the app to create an account.
-* Data is stored in `app.db` (SQLite) by default. Set `DB_URL` to use Postgres if desired, e.g.:
+### Database
 
-  ```
-  export DB_URL="postgresql+psycopg2://user:password@host:5432/dbname"
-  ```
+SQLite is used by default:
 
----
+```bash
+export DB_URL="sqlite:///app.db"
+```
 
-## ☁️ Deploying to Streamlit Community Cloud
+For a supported managed SQLAlchemy database, provide its URL and install the appropriate driver:
 
-1. **Push** your repo to GitHub (make sure `.streamlit/secrets.toml`, any `*.json` keys, `app.db`, and `models/*.joblib` are **ignored**).
-2. On Streamlit Cloud, **Create app** from your repo.
-3. In **App → Settings → Secrets**, paste:
+```bash
+export DB_URL="postgresql+psycopg2://user:password@host:5432/database"
+```
 
-   ```toml
-   [gcp]
-   project_id = "your-gcp-project-id"
-   location   = "us-central1"
-   service_account_json = """
-   { ...full service account JSON with \\n in the private_key... }
-   """
-   ```
-4. (Optional) Upload your model artifacts somewhere accessible (you can commit **non-sensitive** artifacts if licensing allows; otherwise host them privately and load at startup).
-5. Deploy. Sign up a user and test.
+### Vertex AI
 
----
+Environment configuration:
 
-## 🧪 Tests & CI
+```bash
+export PROJECT_ID="your-gcp-project"
+export LOCATION="us-central1"
+export GOOGLE_APPLICATION_CREDENTIALS="/absolute/path/to/service-account.json"
+```
 
-* Run tests:
+Alternatively, configure Streamlit secrets:
 
-  ```bash
-  pytest -q
-  ```
-* CI: GitHub Actions (`.github/workflows/ci.yml`) runs lint + tests on pushes/PRs.
-* Security scanning: CodeQL workflow (`codeql.yml`) runs weekly.
+```toml
+[gcp]
+project_id = "your-gcp-project"
+location = "us-central1"
+service_account_json = """{ ... }"""
+```
 
----
+Never commit `.streamlit/secrets.toml`, database files, or credentials. If Gemini cannot be reached, the model result is still saved and five clearly labeled generic wellness suggestions are displayed.
 
-## 🔧 Configuration
+## Testing
 
-* **LLM model & settings:** fixed in `app.py`
+```bash
+python -m pytest -q
+python scripts/verify_artifacts.py
+python -m compileall -q app.py db.py inference.py vertex_config.py styles.py ui_components.py utils pages tests
+```
 
-  ```python
-  LLM_MODEL_NAME = "gemini-2.5-pro"
-  LLM_TEMPERATURE = 0.3
-  LLM_TOP_P = 0.95
-  LLM_MAX_TOKENS = 2048
-  ```
-* **Theme & server:** `.streamlit/config.toml`
-  (Keep `enableXsrfProtection = true`; remove `enableCORS=false` to avoid warnings.)
-* **DB URL:** `DB_URL` env var (defaults to `sqlite:///app.db`).
+Tests cover artifact loading, feature alignment, output/probability behavior, importance ordering, shared authentication state, database-level record ownership, missing-image fallback detection, and risk presentation helpers.
 
----
+## Streamlit Community Cloud
 
-## 🧰 Troubleshooting
+1. Push the repository without secrets or `app.db`.
+2. Create a Streamlit app using `app.py`.
+3. Add the Vertex configuration in the app’s Secrets settings.
+4. Use a persistent managed database through `DB_URL` if prediction history must survive restarts.
+5. Confirm that model artifacts are distributed legally and are available at startup.
+6. Run the manual privacy, authentication, prediction, fallback, and mobile-layout checks.
 
-* **“LLM feedback unavailable: … not a valid json file … Invalid control character …”**
-  Your service account JSON in secrets has raw newlines. Use `\\n` escapes or set `GOOGLE_APPLICATION_CREDENTIALS` to point to the key file.
+## Security and privacy limitations
 
-* **Partial/short LLM output**
-  We stitch all text parts and increased `max_output_tokens` to 2048. If you still see truncation, raise it further.
+- User-facing history is restricted by a required username predicate in the database query.
+- Passwords are hashed using bcrypt.
+- SQLite is intended for a local or portfolio demonstration, not a multi-instance production health system.
+- Production deployment needs formal authorization design, encryption strategy, secret management, backups, retention controls, monitoring, incident response, and a legal/privacy review.
+- Gemini receives assessment context when guidance generation is enabled.
+- The project does not claim HIPAA, GDPR, NDPR, or other regulatory compliance.
+- Do not enter unnecessary personally identifying information.
 
-* **“feature_names mismatch / wrong column count”**
-  `feature_names.joblib` **must** match the exact post-dummies order used in training. Re-export with `scripts/export_feature_names.py`.
+## Medical safety
 
-* **macOS LibreSSL warning**
-  Harmless for local dev. Consider using Python 3.10+ to link against a newer OpenSSL.
+Model classifications are stored internally as `Has Hypertension` or `No Hypertension` for backward compatibility. The interface consistently presents them as model estimates rather than facts.
 
-* **Nothing appears on Dashboard**
-  Make a prediction first; only successful runs are logged. Also ensure you’re **signed in** (Dashboard is gated).
+Seek urgent medical care for severe chest pain, difficulty breathing, fainting, sudden weakness, confusion, or other serious symptoms. Do not use this application to assess an emergency or to start, stop, or change medication.
 
-* **GitHub rejects push for secrets**
-  Rotate/revoke the leaked key in GCP, purge history with `git filter-repo`, and force-push. Don’t commit `.streamlit/secrets.toml`.
+## License
 
----
-
-## 📄 Data & Privacy
-
-* This tool is for **educational purposes** and does **not** replace professional medical advice.
-* Avoid storing personally identifiable information (PII) in free-text fields.
-* LLM calls send the minimal necessary context to Vertex AI.
-
----
-
-## 📦 Requirements (key packages)
-
-See `requirements.txt`, including:
-
-* `streamlit`
-* `pandas`
-* `scikit-learn` (for scaler compatibility if needed)
-* `joblib`
-* `sqlalchemy`
-* `bcrypt`
-* `google-genai` (Vertex AI client)
-
----
-
-## 📝 License
-
-Add your preferred license (MIT/Apache-2.0/etc.) to a `LICENSE` file.
-
----
-
-## 🙌 Acknowledgements
-
-* Streamlit for the rapid UI
-* Google Vertex AI Gemini for LLM guidance
-* scikit-learn for classical ML utilities
-* Boniface Emmanuel, My Research Assistant
-
+No license has been selected yet. Add a `LICENSE` file before redistributing the project or its generated artwork.

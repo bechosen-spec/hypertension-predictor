@@ -10,7 +10,7 @@ font = "sans serif"                 # "serif" or "monospace" also allowed
 
 [server]
 headless = true
-enableCORS = false                  # set true if you need strict CORS
+enableCORS = true
 enableXsrfProtection = true
 maxUploadSize = 200                 # MB
 runOnSave = false
@@ -20,4 +20,4 @@ gatherUsageStats = false
 
 [client]
 toolbarMode = "auto"                # "minimal", "viewer", "auto"
-showErrorDetails = true             # set false to hide stack traces from users
+showErrorDetails = false

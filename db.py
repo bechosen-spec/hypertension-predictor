@@ -10,7 +10,7 @@ Public API
 ----------
 init_db()
 log_prediction(username, prediction, probability, patient, top_features, llm_feedback, model_version=None, notes=None)
-fetch_logs(limit=200, username=None) -> List[PredictionLog]
+fetch_user_logs(username, limit=200) -> List[PredictionLog]
 to_dict(row) -> dict
 
 # User management
@@ -39,6 +39,7 @@ from sqlalchemy import (
     Index,
 )
 from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.exc import IntegrityError
 
 # --------------------------------------------------------------------
 # Engine / Session
@@ -122,14 +123,17 @@ def create_user(username: str, name: str, password: str) -> bool:
     if not username or not name or not password:
         return False
 
-    with SessionLocal() as s:
-        existing = s.query(User).filter(User.username == username).first()
-        if existing:
-            return False
-        u = User(username=username, name=name, password_hash=hash_password(password))
-        s.add(u)
-        s.commit()
-        return True
+    try:
+        with SessionLocal() as s:
+            existing = s.query(User).filter(User.username == username).first()
+            if existing:
+                return False
+            u = User(username=username, name=name, password_hash=hash_password(password))
+            s.add(u)
+            s.commit()
+            return True
+    except IntegrityError:
+        return False
 
 
 def get_user(username: str) -> Optional[User]:
@@ -169,16 +173,24 @@ def log_prediction(
         s.commit()
 
 
-def fetch_logs(limit: int = 200, username: Optional[str] = None) -> List[PredictionLog]:
+def fetch_user_logs(username: str, limit: int = 200) -> List[PredictionLog]:
+    """Return records owned by one authenticated user.
+
+    User-facing code must use this function rather than an optional frontend
+    filter so ownership is enforced in the database query.
     """
-    Retrieve latest logs (optionally filtered by username).
-    Returns a list of ORM objects (PredictionLog).
-    """
+    owner = (username or "").strip()
+    if not owner:
+        return []
+    safe_limit = max(1, min(int(limit), 2000))
     with SessionLocal() as s:
-        q = s.query(PredictionLog).order_by(PredictionLog.created_at.desc())
-        if username:
-            q = q.filter(PredictionLog.username == username)
-        return q.limit(limit).all()
+        return (
+            s.query(PredictionLog)
+            .filter(PredictionLog.username == owner)
+            .order_by(PredictionLog.created_at.desc())
+            .limit(safe_limit)
+            .all()
+        )
 
 
 # --------------------------------------------------------------------

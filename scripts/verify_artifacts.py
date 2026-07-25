@@ -112,7 +112,7 @@ def main() -> int:
             return 1
         _ok(f"Prepared single row shape: {X.shape}")
         # Basic sanity on dtypes (floats/ints)
-        if not np.issubdtype(X.dtypes[0], np.number):
+        if not np.issubdtype(X.dtypes.iloc[0], np.number):
             _warn("First column is not numeric; check preprocessing.")
     except Exception as e:
         _fail(f"Failed to prepare single row: {e}")
